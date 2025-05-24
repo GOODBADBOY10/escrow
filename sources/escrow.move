@@ -1,10 +1,9 @@
-module escrow::escrow {
+module escrow::escrow;    
+    // imports
     use sui::coin::{Self, Coin}; 
     use sui::sui::SUI;
     use sui::balance::{Self, Balance};
     use sui::clock::{Self, Clock};
-    // use sui::object::{Self, UID};
-    // use sui::tx_context::TxContext;
 
     // Error codes
     const ENotOwner: u64 = 1;
@@ -12,15 +11,17 @@ module escrow::escrow {
     const EInsufficientFunds: u64 = 3;
     const EInvalidUnlockTime: u64 = 4;
 
-    // Escrow object that holds the funds and unlock timestamp
+    // The Escrow object that holds the money and also unlock timestamp
     public struct Escrow has key, store {
         id: UID,
         owner: address,
-        unlock_time: u64, // Unix timestamp in milliseconds
+        unlock_time: u64, 
+        // Unix timestamp in milliseconds (Epoch and Time). Epoch changed roughly every 24 hours. Time represents the current time in milliseconds since the Unix Epoch
+        // You can check it out here:https://move-book.com/programmability/epoch-and-time.html
         funds: Balance<SUI>
     }
 
-    /// Create a new escrow with a specific unlock timestamp
+    // Initilaize a new escrow with a specific unlock timestamp
     public fun create_escrow(
         owner: address,
         unlock_time: u64,
@@ -28,7 +29,7 @@ module escrow::escrow {
         clock: &Clock,
         ctx: &mut TxContext
     ): Escrow {
-        // Ensure unlock time is in the future
+        // Set the unlock time to the future
         let current_time = clock::timestamp_ms(clock);
         assert!(unlock_time > current_time, EInvalidUnlockTime);
         
@@ -41,7 +42,7 @@ module escrow::escrow {
         }
     }
 
-    /// Withdraw funds from escrow (only after unlock time and by owner)
+    // Withdraw money from escrow (only after unlock time and by owner)
     public fun withdraw(
         escrow: Escrow,
         clock: &Clock,
@@ -49,35 +50,35 @@ module escrow::escrow {
     ): Coin<SUI> {
         let Escrow { id, owner, unlock_time, funds } = escrow;
         
-        // Check if caller is the owner
+        // Check if who wants to withdraw is the owner
         assert!(owner == tx_context::sender(ctx), ENotOwner);
         
         // Check if unlock time has passed
         let current_time = clock::timestamp_ms(clock);
         assert!(current_time >= unlock_time, ENotUnlocked);
         
-        // Clean up the object
+        // Clean up the object by deleting
         object::delete(id);
         
-        // Convert balance back to coin and return
+        // Convert balance back to coin and return. 
         coin::from_balance(funds, ctx)
     }
 
-    /// Partial withdrawal (only after unlock time and by owner)
+    // Partial withdrawal (only after unlock time and by owner)
     public fun withdraw_partial(
         escrow: &mut Escrow,
         amount: u64,
         clock: &Clock,
         ctx: &mut TxContext
     ): Coin<SUI> {
-        // Check if caller is the owner
+        // Check if who wants to withdraw is the owner
         assert!(escrow.owner == tx_context::sender(ctx), ENotOwner);
         
         // Check if unlock time has passed
         let current_time = clock::timestamp_ms(clock);
         assert!(current_time >= escrow.unlock_time, ENotUnlocked);
         
-        // Check if sufficient funds
+        // Check if there is enough money available
         assert!(balance::value(&escrow.funds) >= amount, EInsufficientFunds);
         
         // Split the balance and return as coin
@@ -85,13 +86,13 @@ module escrow::escrow {
         coin::from_balance(withdrawn_balance, ctx)
     }
 
-    /// Add more funds to existing escrow (only by owner)
+    // Add more funds to existing escrow (only by owner)
     public fun add_funds(
         escrow: &mut Escrow,
         additional_funds: Coin<SUI>,
         ctx: &mut TxContext
     ) {
-        // Check if caller is the owner
+        // Check if it is the owner
         assert!(escrow.owner == tx_context::sender(ctx), ENotOwner);
         
         // Add the funds to the escrow balance
@@ -99,7 +100,7 @@ module escrow::escrow {
         balance::join(&mut escrow.funds, additional_balance);
     }
 
-    /// Cancel escrow and return funds (only before unlock time and by owner)
+    // Cancel escrow and return funds (only before unlock time and by owner)
     public fun cancel_escrow(
         escrow: Escrow,
         clock: &Clock,
@@ -107,10 +108,10 @@ module escrow::escrow {
     ): Coin<SUI> {
         let Escrow { id, owner, unlock_time, funds } = escrow;
         
-        // Check if caller is the owner
+        // Check if it is the owner
         assert!(owner == tx_context::sender(ctx), ENotOwner);
         
-        // Can only cancel before unlock time
+        // You can only cancel before unlock time
         let current_time = clock::timestamp_ms(clock);
         assert!(current_time < unlock_time, ENotUnlocked);
         
@@ -121,30 +122,28 @@ module escrow::escrow {
         coin::from_balance(funds, ctx)
     }
 
-    // === View Functions ===
-
-    /// Get escrow owner
+    // Get escrow owner
     public fun owner(escrow: &Escrow): address {
         escrow.owner
     }
 
-    /// Get unlock timestamp
+    // Get unlock timestamp
     public fun unlock_time(escrow: &Escrow): u64 {
         escrow.unlock_time
     }
 
-    /// Get current balance amount
+    // Get current balance amount
     public fun balance_value(escrow: &Escrow): u64 {
         balance::value(&escrow.funds)
     }
 
-    /// Check if escrow is unlocked
+    // Check if escrow is unlocked
     public fun is_unlocked(escrow: &Escrow, clock: &Clock): bool {
         let current_time = clock::timestamp_ms(clock);
         current_time >= escrow.unlock_time
     }
 
-    /// Get time remaining until unlock (returns 0 if already unlocked)
+    // Get time remaining until unlock
     public fun time_until_unlock(escrow: &Escrow, clock: &Clock): u64 {
         let current_time = clock::timestamp_ms(clock);
         if (current_time >= escrow.unlock_time) {
@@ -153,20 +152,3 @@ module escrow::escrow {
             escrow.unlock_time - current_time
         }
     }
-
-    // === Test Functions ===
-    #[test_only]
-    public fun create_escrow_for_testing(
-        owner: address,
-        unlock_time: u64,
-        funds: Balance<SUI>,
-        ctx: &mut TxContext
-    ): Escrow {
-        Escrow {
-            id: object::new(ctx),
-            owner,
-            unlock_time,
-            funds
-        }
-    }
-}
