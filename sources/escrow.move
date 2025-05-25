@@ -43,11 +43,12 @@ module escrow::escrow;
     }
 
     // Withdraw money from escrow (only after unlock time and by owner)
+    // also transfer the coin back to the user
     public fun withdraw(
         escrow: Escrow,
         clock: &Clock,
         ctx: &mut TxContext
-    ): Coin<SUI> {
+    ) {
         let Escrow { id, owner, unlock_time, funds } = escrow;
         
         // Check if who wants to withdraw is the owner
@@ -61,7 +62,8 @@ module escrow::escrow;
         object::delete(id);
         
         // Convert balance back to coin and return. 
-        coin::from_balance(funds, ctx)
+        let coin = coin::from_balance(funds, ctx);
+        transfer::public_transfer(coin, owner);
     }
 
     // Partial withdrawal (only after unlock time and by owner)
@@ -70,7 +72,7 @@ module escrow::escrow;
         amount: u64,
         clock: &Clock,
         ctx: &mut TxContext
-    ): Coin<SUI> {
+    ) {
         // Check if who wants to withdraw is the owner
         assert!(escrow.owner == tx_context::sender(ctx), ENotOwner);
         
@@ -83,7 +85,8 @@ module escrow::escrow;
         
         // Split the balance and return as coin
         let withdrawn_balance = balance::split(&mut escrow.funds, amount);
-        coin::from_balance(withdrawn_balance, ctx)
+        let coin = coin::from_balance(withdrawn_balance, ctx);
+        transfer::public_transfer(coin, escrow.owner);
     }
 
     // Add more funds to existing escrow (only by owner)
@@ -121,6 +124,10 @@ module escrow::escrow;
         // Return all funds
         coin::from_balance(funds, ctx)
     }
+
+    // Another way of returning the coin back to the user
+    // let return_coin = cancel_escrow(escrow, clock, ctx);
+    // transfer::public_transfer(refund_coin, owner_address);
 
     // Get escrow owner
     public fun owner(escrow: &Escrow): address {
